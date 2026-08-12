@@ -11,7 +11,8 @@
 
 import Foundation
 
-public enum MCameraError: Error {
+public enum MCameraError: Error, Equatable, Sendable {
     case microphonePermissionsNotGranted, cameraPermissionsNotGranted
     case cannotSetupInput, cannotSetupOutput, cannotSetupMetalDevice
+    case unsupportedRearLens(CameraRearLens)
 }

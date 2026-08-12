@@ -11,9 +11,10 @@
 
 import AVKit
 
-protocol CaptureDevice: NSObject {
+protocol CaptureDevice: NSObject, Sendable {
     // MARK: Getters
     var uniqueID: String { get }
+    var deviceType: AVCaptureDevice.DeviceType { get }
     var exposureDuration: CMTime { get }
     var exposureTargetBias: Float { get }
     var iso: Float { get }

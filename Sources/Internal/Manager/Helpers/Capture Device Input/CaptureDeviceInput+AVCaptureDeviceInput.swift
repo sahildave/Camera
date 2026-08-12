@@ -11,6 +11,8 @@
 
 import AVKit
 
+extension AVCaptureDeviceInput: @unchecked @retroactive Sendable {}
+
 extension AVCaptureDeviceInput: CaptureDeviceInput {
     static func get(mediaType: AVMediaType, position: AVCaptureDevice.Position?) -> Self? {
         let device = { switch mediaType {
@@ -21,6 +23,16 @@ extension AVCaptureDeviceInput: CaptureDeviceInput {
         }}()
 
         guard let device, let deviceInput = try? Self(device: device) else { return nil }
+        return deviceInput
+    }
+
+    static func get(mediaType: AVMediaType, deviceType: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position?) -> Self? {
+        guard mediaType == .video,
+              let position,
+              let device = AVCaptureDevice.default(deviceType, for: .video, position: position),
+              let deviceInput = try? Self(device: device)
+        else { return nil }
+
         return deviceInput
     }
 }

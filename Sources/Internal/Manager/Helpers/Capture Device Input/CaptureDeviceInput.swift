@@ -11,11 +11,12 @@
 
 import AVKit
 
-protocol CaptureDeviceInput: NSObject {
+protocol CaptureDeviceInput: NSObject, Sendable {
     // MARK: Attributes
     associatedtype CD: CaptureDevice
     var device: CD { get }
 
     // MARK: Methods
     static func get(mediaType: AVMediaType, position: AVCaptureDevice.Position?) -> Self?
+    static func get(mediaType: AVMediaType, deviceType: AVCaptureDevice.DeviceType, position: AVCaptureDevice.Position?) -> Self?
 }

@@ -19,10 +19,12 @@ import AVKit
     private(set) var captureSession: any CaptureSession
     private(set) var frontCameraInput: (any CaptureDeviceInput)?
     private(set) var backCameraInput: (any CaptureDeviceInput)?
+    private let captureQueue: CameraManagerCaptureQueue
 
     // MARK: Output
     private(set) var photoOutput: CameraManagerPhotoOutput = .init()
     private(set) var videoOutput: CameraManagerVideoOutput = .init()
+    private(set) var frameOutput: CameraManagerFrameOutput
 
     // MARK: UI Elements
     private(set) var cameraView: UIView!
@@ -37,9 +39,21 @@ import AVKit
 
     // MARK: Initializer
     init<CS: CaptureSession, CDI: CaptureDeviceInput>(captureSession: CS, captureDeviceInputType: CDI.Type) {
+        let frontCameraInput = CDI.get(mediaType: .video, position: .front)
+        let backCameraInput = CDI.get(mediaType: .video, position: .back)
+
         self.captureSession = captureSession
-        self.frontCameraInput = CDI.get(mediaType: .video, position: .front)
-        self.backCameraInput = CDI.get(mediaType: .video, position: .back)
+        self.frontCameraInput = frontCameraInput
+        self.backCameraInput = backCameraInput
+        let captureQueue = CameraManagerCaptureQueue(
+            session: captureSession,
+            activeVideoInput: backCameraInput,
+            makeRearInput: { deviceType in
+                CDI.get(mediaType: .video, deviceType: deviceType, position: .back)
+            }
+        )
+        self.captureQueue = captureQueue
+        self.frameOutput = .init(sessionQueue: captureQueue.queue)
     }
 }
 
@@ -77,23 +91,23 @@ private extension CameraManager {
         cameraView.layer.addSublayer(cameraLayer)
     }
     func setupDeviceInputs() throws(MCameraError) {
-        try captureSession.add(input: getCameraInput())
-        if let audioInput = getAudioInput() { try captureSession.add(input: audioInput) }
+        try captureQueue.add(input: getCameraInput())
+        if let audioInput = getAudioInput() { try captureQueue.add(input: audioInput) }
     }
     func setupDeviceOutput() throws(MCameraError) {
         try photoOutput.setup(parent: self)
         try videoOutput.setup(parent: self)
     }
     func setupFrameRecorder() throws(MCameraError) {
-        let captureVideoOutput = AVCaptureVideoDataOutput()
-        captureVideoOutput.setSampleBufferDelegate(cameraMetalView, queue: .main)
-
-        try captureSession.add(output: captureVideoOutput)
+        frameOutput.cameraManager = self
+        frameOutput.preview = cameraMetalView
+        try captureQueue.add(output: frameOutput.output)
+        configureFrameOutputConnection()
     }
     func startSession() { Task {
         guard let device = getCameraInput()?.device else { return }
 
-        try await startCaptureSession()
+        await startCaptureSession()
         try setupDevice(device)
         resetAttributes(device: device)
         cameraMetalView.performCameraEntranceAnimation()
@@ -109,8 +123,8 @@ private extension CameraManager {
         let audioInput = captureDeviceInputType.get(mediaType: .audio, position: .unspecified)
         return audioInput
     }
-    nonisolated func startCaptureSession() async throws {
-        await captureSession.startRunning()
+    func startCaptureSession() async {
+        captureQueue.startRunning()
     }
     func setupDevice(_ device: any CaptureDevice) throws {
         try device.lockForConfiguration()
@@ -127,7 +141,7 @@ private extension CameraManager {
 // MARK: Cancel
 extension CameraManager {
     func cancel() {
-        captureSession = captureSession.stopRunningAndReturnNewInstance()
+        captureSession = captureQueue.stopRunningAndReturnNewSession()
         motionManager.reset()
         videoOutput.reset()
         notificationCenterManager.reset()
@@ -141,6 +155,21 @@ extension CameraManager {
 
 // MARK: Capture Output
 extension CameraManager {
+    func addCaptureOutput(_ output: AVCaptureOutput) throws(MCameraError) {
+        try captureQueue.add(output: output)
+    }
+
+    /**
+     Replaces the weak live-frame observer registration.
+
+     Registration is serialized with capture-session changes. The observer is not
+     retained by the library, and callbacks are delivered serially on the supplied
+     queue.
+     */
+    public func setFrameObserver(_ observer: (any CameraFrameObserver)?, queue: DispatchQueue = .main) {
+        frameOutput.setObserver(observer, queue: queue)
+    }
+
     func captureOutput() {
         guard !isChanging else { return }
 
@@ -174,13 +203,42 @@ extension CameraManager {
         await cameraMetalView.beginCameraFlipAnimation()
         try changeCameraInput(position)
         resetAttributesWhenChangingCamera(position)
+        configureFrameOutputConnection()
         await cameraMetalView.finishCameraFlipAnimation()
     }
 }
+
+// MARK: Set Rear Camera Lens
+extension CameraManager {
+    /**
+     Selects an exact physical lens on the rear camera.
+
+     Capture-session work is serialized on the camera's capture/session queue. The
+     completion is called exactly once after the requested input has replaced the
+     active video input or the request has failed. Unsupported lenses and input
+     failures are returned without substituting another lens.
+     */
+    public func selectRearLens(
+        _ lens: CameraRearLens,
+        completion: @escaping @Sendable (Result<CameraRearLens, MCameraError>) -> Void
+    ) {
+        captureQueue.setActiveVideoInput(getCameraInput())
+        captureQueue.selectRearLens(lens) { [weak self] result, input in
+            Task { @MainActor in
+                if case .success = result, let input {
+                    self?.backCameraInput = input
+                    self?.attributes.cameraPosition = .back
+                    self?.resetAttributes(device: input.device)
+                }
+                completion(result)
+            }
+        }
+    }
+}
+
 private extension CameraManager {
     func changeCameraInput(_ position: CameraPosition) throws {
-        if let input = getCameraInput() { captureSession.remove(input: input) }
-        try captureSession.add(input: getCameraInput(position))
+        try captureQueue.replaceActiveVideoInput(with: getCameraInput(position))
     }
     func resetAttributesWhenChangingCamera(_ position: CameraPosition) {
         resetAttributes(device: getCameraInput(position)?.device)
@@ -258,6 +316,19 @@ extension CameraManager {
     func setMirrorOutput(_ mirrorOutput: Bool) {
         guard mirrorOutput != attributes.mirrorOutput, !isChanging else { return }
         attributes.mirrorOutput = mirrorOutput
+        configureFrameOutputConnection()
+    }
+}
+
+extension CameraManager {
+    func configureFrameOutputConnection() {
+        let isMirrored = attributes.mirrorOutput
+            ? attributes.cameraPosition != .front
+            : attributes.cameraPosition == .front
+        frameOutput.configureConnection(
+            orientation: attributes.deviceOrientation,
+            isMirrored: isMirrored
+        )
     }
 }
 

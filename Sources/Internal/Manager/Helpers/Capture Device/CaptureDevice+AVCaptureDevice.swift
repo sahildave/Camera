@@ -11,6 +11,8 @@
 
 import AVKit
 
+extension AVCaptureDevice: @unchecked @retroactive Sendable {}
+
 // MARK: Getters
 extension AVCaptureDevice: CaptureDevice {
     var minExposureDuration: CMTime { activeFormat.minExposureDuration }

@@ -20,6 +20,8 @@ import AVKit
     private(set) var currentFrame: CIImage?
     private(set) var focusIndicator: CameraFocusIndicatorView = .init()
     private(set) var isAnimating: Bool = false
+    private let previewProcessingQueue = DispatchQueue(label: "com.mijick.camera.preview-processing", qos: .userInitiated)
+    private let previewProcessor = CameraPreviewProcessor()
 }
 
 // MARK: Setup
@@ -32,6 +34,97 @@ extension CameraMetalView {
         self.addToParent(parent.cameraView)
     }
 }
+
+final class CameraPreviewPixelBuffer: @unchecked Sendable {
+    let value: CVPixelBuffer
+
+    init(value: CVPixelBuffer) {
+        self.value = value
+    }
+}
+
+extension CameraMetalView {
+    nonisolated static func copyPixelBuffer(from sampleBuffer: CMSampleBuffer) -> CameraPreviewPixelBuffer? {
+        guard let source = CMSampleBufferGetImageBuffer(sampleBuffer),
+              let copy = copyPixelBuffer(source)
+        else { return nil }
+
+        return .init(value: copy)
+    }
+}
+
+private extension CameraMetalView {
+    nonisolated static func copyPixelBuffer(_ source: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(source)
+        let height = CVPixelBufferGetHeight(source)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(source)
+        var destination: CVPixelBuffer?
+
+        guard CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            pixelFormat,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+            &destination
+        ) == kCVReturnSuccess,
+        let destination
+        else { return nil }
+
+        guard CVPixelBufferLockBaseAddress(source, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(source, .readOnly) }
+        guard CVPixelBufferLockBaseAddress(destination, []) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(destination, []) }
+
+        let planeCount = CVPixelBufferGetPlaneCount(source)
+        if planeCount > 0 {
+            for plane in 0..<planeCount {
+                guard let sourceBase = CVPixelBufferGetBaseAddressOfPlane(source, plane),
+                      let destinationBase = CVPixelBufferGetBaseAddressOfPlane(destination, plane)
+                else { return nil }
+
+                copyRows(
+                    from: sourceBase,
+                    to: destinationBase,
+                    sourceBytesPerRow: CVPixelBufferGetBytesPerRowOfPlane(source, plane),
+                    destinationBytesPerRow: CVPixelBufferGetBytesPerRowOfPlane(destination, plane),
+                    rowCount: CVPixelBufferGetHeightOfPlane(source, plane)
+                )
+            }
+        } else {
+            guard let sourceBase = CVPixelBufferGetBaseAddress(source),
+                  let destinationBase = CVPixelBufferGetBaseAddress(destination)
+            else { return nil }
+
+            copyRows(
+                from: sourceBase,
+                to: destinationBase,
+                sourceBytesPerRow: CVPixelBufferGetBytesPerRow(source),
+                destinationBytesPerRow: CVPixelBufferGetBytesPerRow(destination),
+                rowCount: CVPixelBufferGetHeight(source)
+            )
+        }
+
+        CVBufferPropagateAttachments(source, destination)
+        return destination
+    }
+
+    nonisolated static func copyRows(
+        from source: UnsafeMutableRawPointer,
+        to destination: UnsafeMutableRawPointer,
+        sourceBytesPerRow: Int,
+        destinationBytesPerRow: Int,
+        rowCount: Int
+    ) {
+        let bytesPerRow = min(sourceBytesPerRow, destinationBytesPerRow)
+        for row in 0..<rowCount {
+            let sourceRow = source.advanced(by: row * sourceBytesPerRow)
+            let destinationRow = destination.advanced(by: row * destinationBytesPerRow)
+            destinationRow.copyMemory(from: sourceRow, byteCount: bytesPerRow)
+        }
+    }
+}
+
 private extension CameraMetalView {
     func assignInitialValues(parent: CameraManager, metalDevice: MTLDevice) {
         self.parent = parent
@@ -174,27 +267,49 @@ extension CameraMetalView {
 
 
 
-// MARK: Capture
-extension CameraMetalView: @preconcurrency AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let cvImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+extension CameraMetalView {
+    func render(pixelBuffer: CameraPreviewPixelBuffer) {
+        let configuration = CameraPreviewConfiguration(
+            frameOrientation: parent.attributes.frameOrientation,
+            filters: parent.attributes.cameraFilters
+        )
+        let previewProcessingQueue = self.previewProcessingQueue
+        let previewProcessor = self.previewProcessor
 
-        let currentFrame = captureCurrentFrame(cvImageBuffer)
-        let currentFrameWithFiltersApplied = applyingFiltersToCurrentFrame(currentFrame)
-        redrawCameraView(currentFrameWithFiltersApplied)
+        previewProcessingQueue.async { [weak self, pixelBuffer, configuration, previewProcessor] in
+            guard let image = previewProcessor.process(pixelBuffer: pixelBuffer.value, configuration: configuration) else { return }
+            let processedFrame = ProcessedCameraFrame(image: image)
+            Task { @MainActor [weak self, processedFrame] in
+                self?.redrawCameraView(processedFrame.image)
+            }
+        }
     }
 }
 private extension CameraMetalView {
-    func captureCurrentFrame(_ cvImageBuffer: CVImageBuffer) -> CIImage {
-        let currentFrame = CIImage(cvImageBuffer: cvImageBuffer)
-        return currentFrame.oriented(parent.attributes.frameOrientation)
-    }
-    func applyingFiltersToCurrentFrame(_ currentFrame: CIImage) -> CIImage {
-        currentFrame.applyingFilters(parent.attributes.cameraFilters)
-    }
     func redrawCameraView(_ frame: CIImage) {
         currentFrame = frame
         draw()
+    }
+}
+
+private struct CameraPreviewConfiguration: @unchecked Sendable {
+    let frameOrientation: CGImagePropertyOrientation
+    let filters: [CIFilter]
+}
+
+private final class ProcessedCameraFrame: @unchecked Sendable {
+    let image: CIImage
+
+    init(image: CIImage) {
+        self.image = image
+    }
+}
+
+private final class CameraPreviewProcessor: @unchecked Sendable {
+    func process(pixelBuffer: CVPixelBuffer, configuration: CameraPreviewConfiguration) -> CIImage? {
+        let currentFrame = CIImage(cvPixelBuffer: pixelBuffer)
+            .oriented(configuration.frameOrientation)
+        return currentFrame.applyingFilters(configuration.filters)
     }
 }
 

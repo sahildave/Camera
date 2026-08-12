@@ -11,9 +11,10 @@
 
 import AVKit
 
-class MockCaptureDevice: NSObject, CaptureDevice {
+class MockCaptureDevice: NSObject, CaptureDevice, @unchecked Sendable {
     // MARK: Getters
     var uniqueID: String = UUID().uuidString
+    var deviceType: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
     var exposureDuration: CMTime { _exposureDuration }
     var exposureTargetBias: Float { _exposureTargetBias }
     var iso: Float { _iso }

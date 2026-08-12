@@ -10,6 +10,7 @@
 
 
 import SwiftUI
+import AVKit
 
 // MARK: Camera Output Type
 public enum CameraOutputType: CaseIterable {
@@ -21,6 +22,19 @@ public enum CameraOutputType: CaseIterable {
 public enum CameraPosition: CaseIterable {
     case back
     case front
+}
+
+// MARK: Rear Camera Lens
+public enum CameraRearLens: CaseIterable, Equatable, Sendable {
+    case ultraWide
+    case wide
+    case telephoto
+
+    public var deviceType: AVCaptureDevice.DeviceType { switch self {
+        case .ultraWide: .builtInUltraWideCamera
+        case .wide: .builtInWideAngleCamera
+        case .telephoto: .builtInTelephotoCamera
+    }}
 }
 
 // MARK: Camera Flash Mode

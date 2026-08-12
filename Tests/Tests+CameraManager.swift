@@ -11,6 +11,7 @@
 
 import Testing
 import SwiftUI
+import AVFoundation
 @testable import MijickCamera
 
 @MainActor @Suite("Camera Manager Tests") struct CameraManagerTests {
@@ -30,6 +31,8 @@ extension CameraManagerTests {
         #expect(cameraManager.photoOutput.parent != nil)
         #expect(cameraManager.videoOutput.parent != nil)
         #expect(cameraManager.captureSession.outputs.count == 3)
+        #expect(cameraManager.captureSession.outputs.filter { $0 is AVCaptureVideoDataOutput }.count == 1)
+        #expect(cameraManager.captureSession.outputs.contains { $0 === cameraManager.frameOutput.output })
         #expect(cameraManager.cameraView != nil)
         #expect(cameraManager.cameraLayer.isHidden == true)
         #expect(cameraManager.cameraMetalView.parent != nil)
