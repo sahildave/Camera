@@ -91,7 +91,9 @@ private extension CameraManager {
         cameraView.layer.addSublayer(cameraLayer)
     }
     func setupDeviceInputs() throws(MCameraError) {
-        try captureQueue.add(input: getCameraInput())
+        let cameraInput = getCameraInput()
+        try captureQueue.add(input: cameraInput)
+        captureQueue.setActiveVideoInput(cameraInput)
         if let audioInput = getAudioInput() { try captureQueue.add(input: audioInput) }
     }
     func setupDeviceOutput() throws(MCameraError) {
@@ -239,7 +241,6 @@ extension CameraManager {
         _ lens: CameraRearLens,
         completion: @escaping @Sendable (Result<CameraRearLens, MCameraError>) -> Void
     ) {
-        captureQueue.setActiveVideoInput(getCameraInput())
         captureQueue.selectRearLens(lens) { [weak self] result, input in
             Task { @MainActor in
                 if case .success = result, let input {
