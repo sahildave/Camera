@@ -71,6 +71,8 @@ extension CameraManagerPhotoOutput {
         if #available(iOS 16.0, *) { settings.maxPhotoDimensions = output.maxPhotoDimensions }
         return settings
     }
+}
+private extension CameraManagerPhotoOutput {
     func configureOutput() {
         guard let connection = output.connection(with: .video), connection.isVideoMirroringSupported else { return }
 
@@ -85,6 +87,8 @@ extension CameraManagerPhotoOutput: @preconcurrency AVCapturePhotoCaptureDelegat
         processCapturedPhoto(imageData: photo.fileDataRepresentation(), error: error)
     }
 }
+
+// MARK: Process Captured Photo
 extension CameraManagerPhotoOutput {
     func processCapturedPhoto(imageData: Data?, error: (any Error)?) {
         guard let parent else { return }

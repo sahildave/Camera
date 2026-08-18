@@ -199,7 +199,7 @@ extension CameraManager {
      notified of a failed shutter press instead of waiting on media that never
      arrives. Cleared when a capture is started and when media is delivered.
      */
-    public var photoCaptureError: MCameraError? { attributes.photoCaptureError }
+    var photoCaptureError: MCameraError? { attributes.photoCaptureError }
 
     func setPhotoCaptureError(_ photoCaptureError: MCameraError?) {
         attributes.photoCaptureError = photoCaptureError
