@@ -4,6 +4,7 @@
 
 import Testing
 import AVFoundation
+import Combine
 import Foundation
 import UIKit
 @testable import MijickCamera
@@ -99,6 +100,27 @@ import UIKit
         #expect(cameraManager.attributes.capturedMedia == nil)
     }
 
+    @Test("A repeated identical capture failure is still published as a change")
+    func repeatedCaptureFailureIsPublishedAsChange() throws {
+        let cameraManager = CameraManager(
+            captureSession: MockCaptureSession(),
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+
+        let recorder = ErrorRecorder()
+        let cancellable = cameraManager.$attributes
+            .map(\.photoCaptureError)
+            .removeDuplicates()
+            .sink { recorder.record($0) }
+        defer { cancellable.cancel() }
+
+        cameraManager.photoOutput.capture()
+        cameraManager.photoOutput.capture()
+
+        #expect(cameraManager.photoCaptureError == .photoCaptureSessionNotReady)
+        #expect(recorder.values == [nil, .photoCaptureSessionNotReady, nil, .photoCaptureSessionNotReady])
+    }
     @Test("A processed photo clears the capture error and delivers the original data")
     func processedPhotoDeliversOriginalData() throws {
         let cameraManager = CameraManager(
@@ -176,6 +198,22 @@ import UIKit
     }
 }
 
+private final class ErrorRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [MCameraError?] = []
+
+    var values: [MCameraError?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded
+    }
+
+    func record(_ error: MCameraError?) {
+        lock.lock()
+        recorded.append(error)
+        lock.unlock()
+    }
+}
 private final class CompletionCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0

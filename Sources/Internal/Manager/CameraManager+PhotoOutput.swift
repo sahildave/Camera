@@ -53,11 +53,11 @@ private extension CameraManagerPhotoOutput {
 // MARK: Capture
 extension CameraManagerPhotoOutput {
     func capture() {
+        parent.setPhotoCaptureError(nil)
         guard parent.getCameraInput()?.device != nil, parent.captureSession.isRunning else { return parent.setPhotoCaptureError(.photoCaptureSessionNotReady) }
 
         let settings = getPhotoOutputSettings()
 
-        parent.setPhotoCaptureError(nil)
         configureOutput()
         output.capturePhoto(with: settings, delegate: self)
         parent.cameraMetalView.performImageCaptureAnimation()
