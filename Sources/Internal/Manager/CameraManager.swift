@@ -321,12 +321,14 @@ extension CameraManager {
 }
 
 extension CameraManager {
+    var frameOutputOrientation: AVCaptureVideoOrientation { attributes.orientationLocked ? .portrait : attributes.deviceOrientation }
+
     func configureFrameOutputConnection() {
         let isMirrored = attributes.mirrorOutput
             ? attributes.cameraPosition != .front
             : attributes.cameraPosition == .front
         frameOutput.configureConnection(
-            orientation: attributes.deviceOrientation,
+            orientation: frameOutputOrientation,
             isMirrored: isMirrored
         )
     }

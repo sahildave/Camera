@@ -46,7 +46,7 @@ private extension CameraManagerMotionManager {
     }}
     func updateDeviceOrientation(_ newDeviceOrientation: AVCaptureVideoOrientation) { if newDeviceOrientation != parent.attributes.deviceOrientation {
         parent.attributes.deviceOrientation = newDeviceOrientation
-        parent.configureFrameOutputConnection()
+        if !parent.attributes.orientationLocked { parent.configureFrameOutputConnection() }
     }}
     func updateUserBlockedScreenRotation() {
         let newUserBlockedScreenRotation = getNewUserBlockedScreenRotation()
