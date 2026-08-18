@@ -242,6 +242,7 @@ private final class ErrorRecorder: @unchecked Sendable {
         lock.unlock()
     }
 }
+
 private final class CompletionCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0

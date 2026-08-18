@@ -9,3 +9,4 @@ DerivedData/
 *.xcscheme
 *.plist
 .swiftpm/xcode/package.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+Package.resolved
