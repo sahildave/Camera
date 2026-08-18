@@ -21,6 +21,17 @@ extension CameraManagerPhotoOutput {
     func setup(parent: CameraManager) throws(MCameraError) {
         self.parent = parent
         try self.parent.addCaptureOutput(output)
+        configureFullQualityCapture()
+    }
+}
+private extension CameraManagerPhotoOutput {
+    func configureFullQualityCapture() {
+        output.maxPhotoQualityPrioritization = .quality
+        if #available(iOS 16.0, *), let maxPhotoDimensions = getMaxPhotoDimensions() { output.maxPhotoDimensions = maxPhotoDimensions }
+    }
+    @available(iOS 16.0, *) func getMaxPhotoDimensions() -> CMVideoDimensions? {
+        guard let device = parent.getCameraInput()?.device as? AVCaptureDevice else { return nil }
+        return device.activeFormat.supportedMaxPhotoDimensions.max { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }
     }
 }
 
@@ -39,10 +50,12 @@ extension CameraManagerPhotoOutput {
         parent.cameraMetalView.performImageCaptureAnimation()
     }
 }
-private extension CameraManagerPhotoOutput {
+extension CameraManagerPhotoOutput {
     func getPhotoOutputSettings() -> AVCapturePhotoSettings {
         let settings = AVCapturePhotoSettings()
         settings.flashMode = parent.attributes.flashMode.toDeviceFlashMode()
+        settings.photoQualityPrioritization = output.maxPhotoQualityPrioritization
+        if #available(iOS 16.0, *) { settings.maxPhotoDimensions = output.maxPhotoDimensions }
         return settings
     }
     func configureOutput() {
@@ -63,7 +76,7 @@ extension CameraManagerPhotoOutput: @preconcurrency AVCapturePhotoCaptureDelegat
         let capturedCIImage = prepareCIImage(ciImage, parent.attributes.cameraFilters)
         let capturedCGImage = prepareCGImage(capturedCIImage)
         let capturedUIImage = prepareUIImage(capturedCGImage)
-        let capturedMedia = MCameraMedia(data: capturedUIImage)
+        let capturedMedia = MCameraMedia(data: capturedUIImage, originalPhotoData: imageData)
 
         parent.setCapturedMedia(capturedMedia)
     }
