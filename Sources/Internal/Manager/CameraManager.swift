@@ -290,6 +290,41 @@ extension CameraManager {
         cameraMetalView.performCameraFocusAnimation(touchPoint: touchPoint)
     }
 }
+// MARK: Set Camera Focus And Exposure
+extension CameraManager {
+    /**
+     Sets the focus and exposure point of interest from a point in the preview's coordinate space.
+
+     `previewPoint` is normalised: `(0, 0)` is the preview's top-left corner and
+     `(1, 1)` its bottom-right corner; out-of-range values are clamped. Device
+     configuration is serialized on the camera's capture/session queue, and the
+     completion is called exactly once with the applied device point of interest.
+     Requests the active device does not support fail explicitly instead of being
+     silently ignored.
+     */
+    public func setFocusAndExposure(
+        at previewPoint: CGPoint,
+        focusMode: AVCaptureDevice.FocusMode = .autoFocus,
+        exposureMode: AVCaptureDevice.ExposureMode = .autoExpose,
+        completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
+    ) {
+        captureQueue.setActiveVideoInput(getCameraInput())
+        captureQueue.setFocusAndExposure(
+            at: convertPreviewPointToPointOfInterest(previewPoint),
+            focusMode: focusMode,
+            exposureMode: exposureMode
+        ) { result in
+            Task { @MainActor in completion(result) }
+        }
+    }
+}
+private extension CameraManager {
+    func convertPreviewPointToPointOfInterest(_ previewPoint: CGPoint) -> CGPoint { .init(
+        x: min(max(previewPoint.y, 0), 1),
+        y: 1 - min(max(previewPoint.x, 0), 1)
+    )}
+}
+
 private extension CameraManager {
     func convertTouchPointToFocusPoint(_ touchPoint: CGPoint) -> CGPoint { .init(
         x: touchPoint.y / cameraView.frame.height,

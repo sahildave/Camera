@@ -91,6 +91,82 @@ import UIKit
         #expect(cameraManager.attributes.capturedMedia?.getOriginalPhotoData() == imageData)
         #expect(cameraManager.attributes.capturedMedia?.getImage() != nil)
     }
+
+    @Test("Setting focus and exposure configures the active device once, in device coordinates")
+    func setFocusAndExposureConfiguresActiveDevice() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try session.add(input: cameraManager.backCameraInput)
+        let device = try #require(cameraManager.backCameraInput?.device as? MockCaptureDevice)
+
+        let completionCounter = CompletionCounter()
+        let result = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .init(x: 0.25, y: 0.75), focusMode: .continuousAutoFocus, exposureMode: .continuousAutoExposure) { result in
+                completionCounter.increment()
+                continuation.resume(returning: result)
+            }
+        }
+
+        #expect(result == .success(.init(x: 0.75, y: 0.75)))
+        #expect(completionCounter.value == 1)
+        #expect(device.focusPointOfInterest == CGPoint(x: 0.75, y: 0.75))
+        #expect(device.exposurePointOfInterest == CGPoint(x: 0.75, y: 0.75))
+        #expect(device.focusMode == .continuousAutoFocus)
+        #expect(device.exposureMode == .continuousAutoExposure)
+    }
+
+    @Test("Focus and exposure requests the active device cannot serve fail explicitly")
+    func unsupportedFocusAndExposureRequestsFail() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try session.add(input: cameraManager.backCameraInput)
+        let device = try #require(cameraManager.backCameraInput?.device as? MockCaptureDevice)
+        device.supportedFocusModes = [.continuousAutoFocus]
+        device.supportedExposureModes = [.continuousAutoExposure]
+
+        let unsupportedFocusMode = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .zero, focusMode: .locked, exposureMode: .continuousAutoExposure) { continuation.resume(returning: $0) }
+        }
+        #expect(unsupportedFocusMode == .failure(.unsupportedFocusMode(.locked)))
+
+        let unsupportedExposureMode = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .zero, focusMode: .continuousAutoFocus, exposureMode: .locked) { continuation.resume(returning: $0) }
+        }
+        #expect(unsupportedExposureMode == .failure(.unsupportedExposureMode(.locked)))
+
+        device.isFocusPointOfInterestSupported = false
+        let unsupportedPointOfInterest = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .zero, focusMode: .continuousAutoFocus, exposureMode: .continuousAutoExposure) { continuation.resume(returning: $0) }
+        }
+        #expect(unsupportedPointOfInterest == .failure(.unsupportedPointOfInterest))
+
+        #expect(device.focusPointOfInterest == .zero)
+        #expect(device.focusMode == .autoFocus)
+        #expect(device.exposureMode == .continuousAutoExposure)
+    }
+}
+
+private final class CompletionCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
 }
 
 private func makeJPEGData() -> Data? {

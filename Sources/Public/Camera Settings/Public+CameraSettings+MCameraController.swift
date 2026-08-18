@@ -9,7 +9,7 @@
 //  Copyright ©2024 Mijick. All rights reserved.
 
 
-import Foundation
+import AVFoundation
 
 // MARK: Available Actions
 public extension MCamera.Controller {
@@ -47,5 +47,22 @@ public extension MCamera.Controller {
         completion: @escaping @Sendable (Result<CameraRearLens, MCameraError>) -> Void
     ) {
         mCamera.manager.selectRearLens(lens, completion: completion)
+    }
+
+    /**
+     Sets the focus and exposure point of interest from a normalised point in the
+     preview's coordinate space, where `(0, 0)` is the preview's top-left corner.
+
+     The completion is called exactly once after the active device is configured
+     or the request fails. A mode the active device does not support is reported
+     as a failure rather than silently ignored.
+     */
+    func setFocusAndExposure(
+        at previewPoint: CGPoint,
+        focusMode: AVCaptureDevice.FocusMode = .autoFocus,
+        exposureMode: AVCaptureDevice.ExposureMode = .autoExpose,
+        completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
+    ) {
+        mCamera.manager.setFocusAndExposure(at: previewPoint, focusMode: focusMode, exposureMode: exposureMode, completion: completion)
     }
 }

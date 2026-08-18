@@ -30,8 +30,10 @@ class MockCaptureDevice: NSObject, CaptureDevice, @unchecked Sendable {
     var maxFrameRate: Float64? { 60 }
     var hasFlash: Bool { true }
     var hasTorch: Bool { true }
-    var isExposurePointOfInterestSupported: Bool { true }
-    var isFocusPointOfInterestSupported: Bool { true }
+    var isExposurePointOfInterestSupported: Bool = true
+    var isFocusPointOfInterestSupported: Bool = true
+    var supportedExposureModes: [AVCaptureDevice.ExposureMode] = [.locked, .autoExpose, .continuousAutoExposure, .custom]
+    var supportedFocusModes: [AVCaptureDevice.FocusMode] = [.locked, .autoFocus, .continuousAutoFocus]
 
     // MARK: Setters
     var videoZoomFactor: CGFloat = 1
@@ -47,7 +49,8 @@ class MockCaptureDevice: NSObject, CaptureDevice, @unchecked Sendable {
     // MARK: Methods
     func lockForConfiguration() throws { return }
     func unlockForConfiguration() { return }
-    func isExposureModeSupported(_ exposureMode: AVCaptureDevice.ExposureMode) -> Bool { true }
+    func isExposureModeSupported(_ exposureMode: AVCaptureDevice.ExposureMode) -> Bool { supportedExposureModes.contains(exposureMode) }
+    func isFocusModeSupported(_ focusMode: AVCaptureDevice.FocusMode) -> Bool { supportedFocusModes.contains(focusMode) }
     func setExposureModeCustom(duration: CMTime, iso: Float, completionHandler: ((CMTime) -> Void)?) {
         _exposureDuration = duration
         _iso = iso

@@ -95,6 +95,29 @@ extension CameraManagerCaptureQueue {
         }
     }
 
+    func setFocusAndExposure(
+        at pointOfInterest: CGPoint,
+        focusMode: AVCaptureDevice.FocusMode,
+        exposureMode: AVCaptureDevice.ExposureMode,
+        completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
+    ) {
+        queue.async { [self] in
+            guard let device = activeVideoInput?.device else { return completion(.failure(.cannotSetupInput)) }
+            guard device.isFocusPointOfInterestSupported, device.isExposurePointOfInterestSupported else { return completion(.failure(.unsupportedPointOfInterest)) }
+            guard device.isFocusModeSupported(focusMode) else { return completion(.failure(.unsupportedFocusMode(focusMode))) }
+            guard device.isExposureModeSupported(exposureMode) else { return completion(.failure(.unsupportedExposureMode(exposureMode))) }
+
+            do { try device.lockForConfiguration() } catch { return completion(.failure(.cannotLockDeviceForConfiguration)) }
+            device.focusPointOfInterest = pointOfInterest
+            device.focusMode = focusMode
+            device.exposurePointOfInterest = pointOfInterest
+            device.exposureMode = exposureMode
+            device.unlockForConfiguration()
+
+            completion(.success(pointOfInterest))
+        }
+    }
+
     func selectRearLens(
         _ lens: CameraRearLens,
         completion: @escaping @Sendable (Result<CameraRearLens, MCameraError>, (any CaptureDeviceInput)?) -> Void

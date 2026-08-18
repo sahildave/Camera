@@ -48,6 +48,7 @@ protocol CaptureDevice: NSObject, Sendable {
     func lockForConfiguration() throws
     func unlockForConfiguration()
     func isExposureModeSupported(_ exposureMode: AVCaptureDevice.ExposureMode) -> Bool
+    func isFocusModeSupported(_ focusMode: AVCaptureDevice.FocusMode) -> Bool
     func setExposureModeCustom(duration: CMTime, iso: Float, completionHandler: (@Sendable (CMTime) -> Void)?)
     func setExposureTargetBias(_ bias: Float, completionHandler handler: (@Sendable (CMTime) -> ())?)
 }

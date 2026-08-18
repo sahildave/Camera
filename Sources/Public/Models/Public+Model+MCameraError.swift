@@ -9,11 +9,14 @@
 //  Copyright ©2024 Mijick. All rights reserved.
 
 
-import Foundation
+import AVFoundation
 
 public enum MCameraError: Error, Equatable, Sendable {
     case microphonePermissionsNotGranted, cameraPermissionsNotGranted
     case cannotSetupInput, cannotSetupOutput, cannotSetupMetalDevice
     case unsupportedRearLens(CameraRearLens)
     case photoCaptureSessionNotReady, photoCaptureFailed, photoPostProcessingFailed
+    case unsupportedPointOfInterest, cannotLockDeviceForConfiguration
+    case unsupportedFocusMode(AVCaptureDevice.FocusMode)
+    case unsupportedExposureMode(AVCaptureDevice.ExposureMode)
 }
