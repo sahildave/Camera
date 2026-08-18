@@ -183,8 +183,25 @@ extension CameraManager {
 // MARK: Set Captured Media
 extension CameraManager {
     func setCapturedMedia(_ capturedMedia: MCameraMedia?) { withAnimation(.mSpring) {
+        attributes.photoCaptureError = nil
         attributes.capturedMedia = capturedMedia
     }}
+}
+
+// MARK: Photo Capture Error
+extension CameraManager {
+    /**
+     The failure of the most recent photo capture, or nil while no capture has failed.
+
+     Published alongside the captured media, so a screen observing the manager is
+     notified of a failed shutter press instead of waiting on media that never
+     arrives. Cleared when a capture is started and when media is delivered.
+     */
+    public var photoCaptureError: MCameraError? { attributes.photoCaptureError }
+
+    func setPhotoCaptureError(_ photoCaptureError: MCameraError?) {
+        attributes.photoCaptureError = photoCaptureError
+    }
 }
 
 // MARK: Set Camera Output

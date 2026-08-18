@@ -43,8 +43,11 @@ private extension CameraManagerPhotoOutput {
 // MARK: Capture
 extension CameraManagerPhotoOutput {
     func capture() {
+        guard parent.getCameraInput()?.device != nil, parent.captureSession.isRunning else { return parent.setPhotoCaptureError(.photoCaptureSessionNotReady) }
+
         let settings = getPhotoOutputSettings()
 
+        parent.setPhotoCaptureError(nil)
         configureOutput()
         output.capturePhoto(with: settings, delegate: self)
         parent.cameraMetalView.performImageCaptureAnimation()
@@ -69,14 +72,19 @@ extension CameraManagerPhotoOutput {
 // MARK: Receive Data
 extension CameraManagerPhotoOutput: @preconcurrency AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
-        guard let imageData = photo.fileDataRepresentation(),
-              let ciImage = CIImage(data: imageData)
-        else { return }
+        processCapturedPhoto(imageData: photo.fileDataRepresentation(), error: error)
+    }
+}
+extension CameraManagerPhotoOutput {
+    func processCapturedPhoto(imageData: Data?, error: (any Error)?) {
+        guard let parent else { return }
+        guard error == nil else { return parent.setPhotoCaptureError(.photoCaptureFailed) }
+        guard let imageData, let ciImage = CIImage(data: imageData) else { return parent.setPhotoCaptureError(.photoPostProcessingFailed) }
 
         let capturedCIImage = prepareCIImage(ciImage, parent.attributes.cameraFilters)
         let capturedCGImage = prepareCGImage(capturedCIImage)
         let capturedUIImage = prepareUIImage(capturedCGImage)
-        let capturedMedia = MCameraMedia(data: capturedUIImage, originalPhotoData: imageData)
+        guard let capturedMedia = MCameraMedia(data: capturedUIImage, originalPhotoData: imageData) else { return parent.setPhotoCaptureError(.photoPostProcessingFailed) }
 
         parent.setCapturedMedia(capturedMedia)
     }

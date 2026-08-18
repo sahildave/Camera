@@ -54,4 +54,50 @@ import UIKit
         #expect(media.getImage() != nil)
         #expect(MCameraMedia(data: UIImage())?.getOriginalPhotoData() == nil)
     }
+
+    @Test("Photo capture failures are reported instead of being dropped silently")
+    func photoCaptureFailuresAreReported() throws {
+        let cameraManager = CameraManager(
+            captureSession: MockCaptureSession(),
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+
+        cameraManager.photoOutput.capture()
+        #expect(cameraManager.photoCaptureError == .photoCaptureSessionNotReady)
+        #expect(cameraManager.attributes.capturedMedia == nil)
+
+        cameraManager.photoOutput.processCapturedPhoto(imageData: nil, error: NSError(domain: "DuoCamTests", code: 1))
+        #expect(cameraManager.photoCaptureError == .photoCaptureFailed)
+
+        cameraManager.photoOutput.processCapturedPhoto(imageData: Data([0x00, 0x01]), error: nil)
+        #expect(cameraManager.photoCaptureError == .photoPostProcessingFailed)
+        #expect(cameraManager.attributes.capturedMedia == nil)
+    }
+
+    @Test("A processed photo clears the capture error and delivers the original data")
+    func processedPhotoDeliversOriginalData() throws {
+        let cameraManager = CameraManager(
+            captureSession: MockCaptureSession(),
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+        cameraManager.photoOutput.processCapturedPhoto(imageData: nil, error: NSError(domain: "DuoCamTests", code: 1))
+
+        let imageData = try #require(makeJPEGData())
+        cameraManager.photoOutput.processCapturedPhoto(imageData: imageData, error: nil)
+
+        #expect(cameraManager.photoCaptureError == nil)
+        #expect(cameraManager.attributes.capturedMedia?.getOriginalPhotoData() == imageData)
+        #expect(cameraManager.attributes.capturedMedia?.getImage() != nil)
+    }
+}
+
+private func makeJPEGData() -> Data? {
+    let renderer = UIGraphicsImageRenderer(size: .init(width: 4, height: 4))
+    let image = renderer.image { context in
+        UIColor.red.setFill()
+        context.fill(.init(x: 0, y: 0, width: 4, height: 4))
+    }
+    return image.jpegData(compressionQuality: 1)
 }

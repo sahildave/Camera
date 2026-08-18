@@ -222,6 +222,7 @@ public extension MCameraScreen {
     var cameraFilters: [CIFilter] { cameraManager.attributes.cameraFilters }
     var isOutputMirrored: Bool { cameraManager.attributes.mirrorOutput }
     var isGridVisible: Bool { cameraManager.attributes.isGridVisible }
+    var photoCaptureError: MCameraError? { cameraManager.photoCaptureError }
 }
 public extension MCameraScreen {
     var hasFlash: Bool { cameraManager.hasFlash }

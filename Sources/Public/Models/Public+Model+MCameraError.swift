@@ -15,4 +15,5 @@ public enum MCameraError: Error, Equatable, Sendable {
     case microphonePermissionsNotGranted, cameraPermissionsNotGranted
     case cannotSetupInput, cannotSetupOutput, cannotSetupMetalDevice
     case unsupportedRearLens(CameraRearLens)
+    case photoCaptureSessionNotReady, photoCaptureFailed, photoPostProcessingFailed
 }
