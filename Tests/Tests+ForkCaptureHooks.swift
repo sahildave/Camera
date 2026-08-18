@@ -6,6 +6,7 @@ import Testing
 import AVFoundation
 import Combine
 import Foundation
+import SwiftUI
 import UIKit
 @testable import MijickCamera
 
@@ -166,6 +167,25 @@ import UIKit
         #expect(cameraManager.attributes.capturedMedia?.getImage() != nil)
     }
 
+    @Test("A camera screen reads the original photo data without a captured media screen")
+    func cameraScreenExposesCapturedPhotoData() throws {
+        let cameraManager = CameraManager(
+            captureSession: MockCaptureSession(),
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+
+        let screen = ForkTestCameraScreen(cameraManager: cameraManager, namespace: Namespace().wrappedValue, closeMCameraAction: {})
+        #expect(screen.capturedPhotoData == nil)
+
+        let imageData = try #require(makeJPEGData())
+        cameraManager.photoOutput.processCapturedPhoto(imageData: imageData, error: nil)
+        #expect(screen.capturedPhotoData == imageData)
+
+        cameraManager.setCapturedMedia(nil)
+        #expect(screen.capturedPhotoData == nil)
+    }
+
     @Test("Setting focus and exposure configures the active device once, in device coordinates")
     func setFocusAndExposureConfiguresActiveDevice() async throws {
         let session = MockCaptureSession()
@@ -224,6 +244,14 @@ import UIKit
         #expect(device.focusMode == .autoFocus)
         #expect(device.exposureMode == .continuousAutoExposure)
     }
+}
+
+private struct ForkTestCameraScreen: MCameraScreen {
+    @ObservedObject var cameraManager: CameraManager
+    let namespace: Namespace.ID
+    let closeMCameraAction: () -> ()
+
+    var body: some View { EmptyView() }
 }
 
 private final class ErrorRecorder: @unchecked Sendable {

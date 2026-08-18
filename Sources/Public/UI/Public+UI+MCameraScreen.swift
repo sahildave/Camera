@@ -223,6 +223,7 @@ public extension MCameraScreen {
     var isOutputMirrored: Bool { cameraManager.attributes.mirrorOutput }
     var isGridVisible: Bool { cameraManager.attributes.isGridVisible }
     var photoCaptureError: MCameraError? { cameraManager.photoCaptureError }
+    var capturedPhotoData: Data? { cameraManager.attributes.capturedMedia?.getOriginalPhotoData() }
 }
 public extension MCameraScreen {
     var hasFlash: Bool { cameraManager.hasFlash }
