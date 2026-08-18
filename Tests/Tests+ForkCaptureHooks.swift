@@ -45,6 +45,30 @@ import UIKit
         }
     }
 
+    @Test("Full-quality capture settings are recomputed when the active video input changes")
+    func fullQualityCaptureRecomputedOnInputChange() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try session.add(input: cameraManager.backCameraInput)
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+
+        let wideDeviceID = try #require(cameraManager.backCameraInput?.device.uniqueID)
+        #expect(cameraManager.photoOutput.fullQualityCaptureDeviceID == wideDeviceID)
+
+        let result = await withCheckedContinuation { continuation in
+            cameraManager.selectRearLens(.telephoto) { continuation.resume(returning: $0) }
+        }
+        let telephotoDevice = try #require(cameraManager.backCameraInput?.device)
+
+        #expect(result == .success(.telephoto))
+        #expect(telephotoDevice.deviceType == .builtInTelephotoCamera)
+        #expect(telephotoDevice.uniqueID != wideDeviceID)
+        #expect(cameraManager.photoOutput.fullQualityCaptureDeviceID == telephotoDevice.uniqueID)
+    }
+
     @Test("Captured media carries the original photo data alongside the decoded image")
     func capturedMediaCarriesOriginalPhotoData() throws {
         let originalPhotoData = Data([0x01, 0x02, 0x03])

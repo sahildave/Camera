@@ -14,6 +14,7 @@ import AVKit
 @MainActor class CameraManagerPhotoOutput: NSObject {
     private(set) var parent: CameraManager!
     private(set) var output: AVCapturePhotoOutput = .init()
+    private(set) var fullQualityCaptureDeviceID: String?
 }
 
 // MARK: Setup
@@ -21,16 +22,25 @@ extension CameraManagerPhotoOutput {
     func setup(parent: CameraManager) throws(MCameraError) {
         self.parent = parent
         try self.parent.addCaptureOutput(output)
-        configureFullQualityCapture()
+        configureFullQualityCapture(for: parent.getCameraInput()?.device)
+    }
+
+    /**
+     Recomputes the full-quality capture ceiling from the given device's active format.
+
+     Must be called for every active video input change, not only at setup: swapping
+     the camera position or the rear lens activates a different format, and the
+     previous format's maximum dimensions may not be supported by the new one.
+     */
+    func configureFullQualityCapture(for device: (any CaptureDevice)?) {
+        output.maxPhotoQualityPrioritization = .quality
+        fullQualityCaptureDeviceID = device?.uniqueID
+        if #available(iOS 16.0, *), let maxPhotoDimensions = getMaxPhotoDimensions(device) { output.maxPhotoDimensions = maxPhotoDimensions }
     }
 }
 private extension CameraManagerPhotoOutput {
-    func configureFullQualityCapture() {
-        output.maxPhotoQualityPrioritization = .quality
-        if #available(iOS 16.0, *), let maxPhotoDimensions = getMaxPhotoDimensions() { output.maxPhotoDimensions = maxPhotoDimensions }
-    }
-    @available(iOS 16.0, *) func getMaxPhotoDimensions() -> CMVideoDimensions? {
-        guard let device = parent.getCameraInput()?.device as? AVCaptureDevice else { return nil }
+    @available(iOS 16.0, *) func getMaxPhotoDimensions(_ device: (any CaptureDevice)?) -> CMVideoDimensions? {
+        guard let device = device as? AVCaptureDevice else { return nil }
         return device.activeFormat.supportedMaxPhotoDimensions.max { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }
     }
 }

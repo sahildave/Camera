@@ -533,6 +533,8 @@ extension CameraManager {
     func resetAttributes(device: (any CaptureDevice)?) {
         guard let device else { return }
 
+        photoOutput.configureFullQualityCapture(for: device)
+
         var newAttributes = attributes
         newAttributes.cameraExposure.mode = device.exposureMode
         newAttributes.cameraExposure.duration = device.exposureDuration
