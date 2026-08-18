@@ -121,6 +121,34 @@ import UIKit
         #expect(cameraManager.photoCaptureError == .photoCaptureSessionNotReady)
         #expect(recorder.values == [nil, .photoCaptureSessionNotReady, nil, .photoCaptureSessionNotReady])
     }
+
+    @Test("A device supporting only one of focus and exposure serves the half it supports")
+    func halfSupportedPointOfInterestIsServed() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try session.add(input: cameraManager.backCameraInput)
+        let device = try #require(cameraManager.backCameraInput?.device as? MockCaptureDevice)
+        device.isFocusPointOfInterestSupported = false
+
+        let exposureOnly = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .init(x: 0.25, y: 0.75), focusMode: nil, exposureMode: .continuousAutoExposure) { continuation.resume(returning: $0) }
+        }
+        #expect(exposureOnly == .success(.init(x: 0.75, y: 0.75)))
+        #expect(device.exposurePointOfInterest == CGPoint(x: 0.75, y: 0.75))
+        #expect(device.exposureMode == .continuousAutoExposure)
+        #expect(device.focusPointOfInterest == .zero)
+        #expect(device.focusMode == .autoFocus)
+
+        let bothHalves = await withCheckedContinuation { continuation in
+            cameraManager.setFocusAndExposure(at: .init(x: 0, y: 0), focusMode: .autoFocus, exposureMode: .continuousAutoExposure) { continuation.resume(returning: $0) }
+        }
+        #expect(bothHalves == .failure(.unsupportedPointOfInterest))
+        #expect(device.exposurePointOfInterest == CGPoint(x: 0.75, y: 0.75))
+    }
+
     @Test("A processed photo clears the capture error and delivers the original data")
     func processedPhotoDeliversOriginalData() throws {
         let cameraManager = CameraManager(

@@ -55,12 +55,14 @@ public extension MCamera.Controller {
 
      The completion is called exactly once after the active device is configured
      or the request fails. A mode the active device does not support is reported
-     as a failure rather than silently ignored.
+     as a failure rather than silently ignored. A nil mode leaves that half of the
+     device untouched, so a device supporting only focus or only exposure is served
+     by requesting only that half.
      */
     func setFocusAndExposure(
         at previewPoint: CGPoint,
-        focusMode: AVCaptureDevice.FocusMode = .autoFocus,
-        exposureMode: AVCaptureDevice.ExposureMode = .autoExpose,
+        focusMode: AVCaptureDevice.FocusMode? = .autoFocus,
+        exposureMode: AVCaptureDevice.ExposureMode? = .autoExpose,
         completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
     ) {
         mCamera.manager.setFocusAndExposure(at: previewPoint, focusMode: focusMode, exposureMode: exposureMode, completion: completion)

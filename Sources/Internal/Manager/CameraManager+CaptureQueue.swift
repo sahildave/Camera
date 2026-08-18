@@ -97,21 +97,30 @@ extension CameraManagerCaptureQueue {
 
     func setFocusAndExposure(
         at pointOfInterest: CGPoint,
-        focusMode: AVCaptureDevice.FocusMode,
-        exposureMode: AVCaptureDevice.ExposureMode,
+        focusMode: AVCaptureDevice.FocusMode?,
+        exposureMode: AVCaptureDevice.ExposureMode?,
         completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
     ) {
         queue.async { [self] in
             guard let device = activeVideoInput?.device else { return completion(.failure(.cannotSetupInput)) }
-            guard device.isFocusPointOfInterestSupported, device.isExposurePointOfInterestSupported else { return completion(.failure(.unsupportedPointOfInterest)) }
-            guard device.isFocusModeSupported(focusMode) else { return completion(.failure(.unsupportedFocusMode(focusMode))) }
-            guard device.isExposureModeSupported(exposureMode) else { return completion(.failure(.unsupportedExposureMode(exposureMode))) }
+            if let focusMode {
+                guard device.isFocusPointOfInterestSupported else { return completion(.failure(.unsupportedPointOfInterest)) }
+                guard device.isFocusModeSupported(focusMode) else { return completion(.failure(.unsupportedFocusMode(focusMode))) }
+            }
+            if let exposureMode {
+                guard device.isExposurePointOfInterestSupported else { return completion(.failure(.unsupportedPointOfInterest)) }
+                guard device.isExposureModeSupported(exposureMode) else { return completion(.failure(.unsupportedExposureMode(exposureMode))) }
+            }
 
             do { try device.lockForConfiguration() } catch { return completion(.failure(.cannotLockDeviceForConfiguration)) }
-            device.focusPointOfInterest = pointOfInterest
-            device.focusMode = focusMode
-            device.exposurePointOfInterest = pointOfInterest
-            device.exposureMode = exposureMode
+            if let focusMode {
+                device.focusPointOfInterest = pointOfInterest
+                device.focusMode = focusMode
+            }
+            if let exposureMode {
+                device.exposurePointOfInterest = pointOfInterest
+                device.exposureMode = exposureMode
+            }
             device.unlockForConfiguration()
 
             completion(.success(pointOfInterest))

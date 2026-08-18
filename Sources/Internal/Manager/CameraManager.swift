@@ -299,16 +299,19 @@ extension CameraManager {
      `(1, 1)` its bottom-right corner; out-of-range values are clamped. Device
      configuration is serialized on the camera's capture/session queue, and the
      completion is called exactly once with the applied device point of interest.
-     Requests the active device does not support fail explicitly instead of being
-     silently ignored.
+
+     Focus and exposure are requested independently: a nil mode leaves that half of
+     the device untouched, so a device that supports only one of them is served by
+     asking for only that one. Every requested half is checked before anything is
+     applied, so the completion reports `.success` only when every requested half
+     was applied, and a failure leaves the device unchanged.
      */
     public func setFocusAndExposure(
         at previewPoint: CGPoint,
-        focusMode: AVCaptureDevice.FocusMode = .autoFocus,
-        exposureMode: AVCaptureDevice.ExposureMode = .autoExpose,
+        focusMode: AVCaptureDevice.FocusMode? = .autoFocus,
+        exposureMode: AVCaptureDevice.ExposureMode? = .autoExpose,
         completion: @escaping @Sendable (Result<CGPoint, MCameraError>) -> Void
     ) {
-        captureQueue.setActiveVideoInput(getCameraInput())
         captureQueue.setFocusAndExposure(
             at: convertPreviewPointToPointOfInterest(previewPoint),
             focusMode: focusMode,
