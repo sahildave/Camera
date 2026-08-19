@@ -496,7 +496,9 @@ extension CameraManager {
     func setResolution(_ resolution: AVCaptureSession.Preset) {
         guard resolution != attributes.resolution, resolution != attributes.resolution, !isChanging else { return }
 
+        captureSession.beginConfiguration()
         captureSession.sessionPreset = resolution
+        captureSession.commitConfiguration()
         attributes.resolution = resolution
     }
 }

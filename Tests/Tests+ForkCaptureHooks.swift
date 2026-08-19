@@ -244,6 +244,47 @@ import UIKit
         #expect(device.focusMode == .autoFocus)
         #expect(device.exposureMode == .continuousAutoExposure)
     }
+
+    @Test("A rear lens swap runs inside a single balanced capture-session configuration transaction")
+    func selectRearLensBracketsInputSwap() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        try session.add(input: cameraManager.backCameraInput)
+
+        let result = await withCheckedContinuation { continuation in
+            cameraManager.selectRearLens(.telephoto) { continuation.resume(returning: $0) }
+        }
+        #expect(result == .success(.telephoto))
+
+        let events = session.sessionEvents
+        #expect(events.filter { $0 == .beginConfiguration }.count == 1)
+        #expect(events.filter { $0 == .commitConfiguration }.count == 1)
+        #expect(events == [.addInput, .beginConfiguration, .removeInput, .addInput, .commitConfiguration])
+    }
+
+    @Test("Switching camera position replaces the active video input inside a single balanced configuration transaction")
+    func replaceActiveVideoInputBracketsInputSwap() async throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+        cameraManager.initialize(in: UIView(frame: .init(origin: .zero, size: .init(width: 1000, height: 1000))))
+        try await cameraManager.setup()
+        await Task.sleep(seconds: 1)
+        let eventsBeforeSwap = session.sessionEvents.count
+
+        try await cameraManager.setCameraPosition(.front)
+        #expect(cameraManager.attributes.cameraPosition == .front)
+
+        let events = Array(session.sessionEvents.dropFirst(eventsBeforeSwap))
+        #expect(events.filter { $0 == .beginConfiguration }.count == 1)
+        #expect(events.filter { $0 == .commitConfiguration }.count == 1)
+        #expect(events == [.beginConfiguration, .removeInput, .addInput, .commitConfiguration])
+    }
 }
 
 private struct ForkTestCameraScreen: MCameraScreen {

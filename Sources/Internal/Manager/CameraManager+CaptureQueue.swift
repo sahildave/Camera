@@ -76,6 +76,9 @@ extension CameraManagerCaptureQueue {
     func replaceActiveVideoInput(with input: (any CaptureDeviceInput)?) throws(MCameraError) {
         do {
             try queue.sync {
+                session.beginConfiguration()
+                defer { session.commitConfiguration() }
+
                 let previousInput = activeVideoInput
                 if let previousInput { session.remove(input: previousInput) }
 
@@ -137,22 +140,32 @@ extension CameraManagerCaptureQueue {
                 return
             }
 
-            let previousInput = activeVideoInput
-            if let previousInput { session.remove(input: previousInput) }
+            // The swap runs inside a single configuration transaction, and the completion is called
+            // only after it commits, so the session has settled its active format for the new input
+            // before any observer reads the device.
+            let outcome: (Result<CameraRearLens, MCameraError>, (any CaptureDeviceInput)?) = {
+                session.beginConfiguration()
+                defer { session.commitConfiguration() }
 
-            do {
-                try session.add(input: requestedInput)
-                activeVideoInput = requestedInput
-                completion(.success(lens), requestedInput)
-            } catch let error as MCameraError {
-                if let previousInput { try? session.add(input: previousInput) }
-                activeVideoInput = previousInput
-                completion(.failure(error), nil)
-            } catch {
-                if let previousInput { try? session.add(input: previousInput) }
-                activeVideoInput = previousInput
-                completion(.failure(.cannotSetupInput), nil)
-            }
+                let previousInput = activeVideoInput
+                if let previousInput { session.remove(input: previousInput) }
+
+                do {
+                    try session.add(input: requestedInput)
+                    activeVideoInput = requestedInput
+                    return (.success(lens), requestedInput)
+                } catch let error as MCameraError {
+                    if let previousInput { try? session.add(input: previousInput) }
+                    activeVideoInput = previousInput
+                    return (.failure(error), nil)
+                } catch {
+                    if let previousInput { try? session.add(input: previousInput) }
+                    activeVideoInput = previousInput
+                    return (.failure(.cannotSetupInput), nil)
+                }
+            }()
+
+            completion(outcome.0, outcome.1)
         }
     }
 }

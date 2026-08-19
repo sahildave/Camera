@@ -19,10 +19,18 @@ class MockCaptureSession: NSObject, CaptureSession { required override init() {}
     var outputs: [AVCaptureOutput] { _outputs }
     var sessionPreset: AVCaptureSession.Preset = .cif352x288
 
+    /// Ordered record of the session mutations performed on this instance, so tests can assert that
+    /// input changes are bracketed by a balanced configuration transaction.
+    private(set) var sessionEvents: [SessionEvent] = []
+
     // MARK: Private Attributes
     private var _isRunning: Bool = false
     private var _deviceInputs: [any CaptureDeviceInput] = []
     private var _outputs: [AVCaptureOutput] = []
+}
+
+extension MockCaptureSession {
+    enum SessionEvent: Equatable { case beginConfiguration, commitConfiguration, addInput, removeInput }
 }
 
 
@@ -30,6 +38,10 @@ class MockCaptureSession: NSObject, CaptureSession { required override init() {}
 
 
 
+extension MockCaptureSession {
+    func beginConfiguration() { sessionEvents.append(.beginConfiguration) }
+    func commitConfiguration() { sessionEvents.append(.commitConfiguration) }
+}
 extension MockCaptureSession {
     func startRunning() { Task { @MainActor in
         _isRunning = true
@@ -43,10 +55,12 @@ extension MockCaptureSession {
     func add(input: (any CaptureDeviceInput)?) throws(MCameraError) {
         guard let input = input as? MockDeviceInput, !_deviceInputs.contains(where: { input == $0 }) else { throw .cannotSetupInput }
         _deviceInputs.append(input)
+        sessionEvents.append(.addInput)
     }
     func remove(input: (any CaptureDeviceInput)?) {
         guard let input = input as? MockDeviceInput, let index = _deviceInputs.firstIndex(where: { $0.device.uniqueID == input.device.uniqueID }) else { return }
         _deviceInputs.remove(at: index)
+        sessionEvents.append(.removeInput)
     }
 }
 extension MockCaptureSession {
