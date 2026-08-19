@@ -22,7 +22,7 @@ extension CameraManagerPhotoOutput {
     func setup(parent: CameraManager) throws(MCameraError) {
         self.parent = parent
         try self.parent.addCaptureOutput(output)
-        configureFullQualityCapture(for: parent.getCameraInput()?.device)
+        configureFullQualityCapture(for: parent.activeVideoInputDevice)
     }
 
     /**
@@ -35,7 +35,9 @@ extension CameraManagerPhotoOutput {
     func configureFullQualityCapture(for device: (any CaptureDevice)?) {
         output.maxPhotoQualityPrioritization = .quality
         fullQualityCaptureDeviceID = device?.uniqueID
-        if #available(iOS 16.0, *), let maxPhotoDimensions = getMaxPhotoDimensions(device) { output.maxPhotoDimensions = maxPhotoDimensions }
+        // `setMaxPhotoDimensions` raises an uncatchable ObjC exception unless the output is
+        // already connected to a video source with an active format.
+        if #available(iOS 16.0, *), output.connection(with: .video) != nil, let maxPhotoDimensions = getMaxPhotoDimensions(device) { output.maxPhotoDimensions = maxPhotoDimensions }
     }
 }
 private extension CameraManagerPhotoOutput {

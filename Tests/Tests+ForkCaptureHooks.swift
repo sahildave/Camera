@@ -27,6 +27,64 @@ import UIKit
         #expect(cameraManager.attributes.deviceOrientation == .landscapeLeft)
     }
 
+    @Test("Full-quality capture follows the adopted input, not the one resolved by position")
+    func fullQualityCaptureFollowsAdoptedInput() throws {
+        let session = MockCaptureSession()
+        let cameraManager = CameraManager(
+            captureSession: session,
+            captureDeviceInputType: MockDeviceInput.self
+        )
+
+        // A lens selection reached the still-empty session before setup ran.
+        let racedInput = try #require(MockDeviceInput.get(mediaType: .video, position: .front))
+        try cameraManager.captureQueue.replaceActiveVideoInput(with: racedInput)
+
+        try cameraManager.photoOutput.setup(parent: cameraManager)
+
+        // Not `backCameraInput`, which is what `getCameraInput()` resolves by position.
+        #expect(cameraManager.photoOutput.fullQualityCaptureDeviceID == racedInput.device.uniqueID)
+        #expect(cameraManager.photoOutput.fullQualityCaptureDeviceID != cameraManager.backCameraInput?.device.uniqueID)
+    }
+
+    @Test("Setup adopts a video input an early lens selection already put in the session")
+    func setupAdoptsInputAddedBeforeSetupRan() throws {
+        let session = MockCaptureSession()
+        let seedInput = try #require(MockDeviceInput.get(mediaType: .video, position: .back))
+        let captureQueue = CameraManagerCaptureQueue(
+            session: session,
+            activeVideoInput: seedInput,
+            makeRearInput: { MockDeviceInput.get(mediaType: .video, deviceType: $0, position: .back) }
+        )
+
+        // `setup()` suspends on the permission request, so a lens selection can reach the still
+        // empty session first and take the single video slot.
+        let earlyInput = try #require(MockDeviceInput.get(mediaType: .video, position: .front))
+        try captureQueue.replaceActiveVideoInput(with: earlyInput)
+
+        // Setup must not throw, and must leave the early input in place.
+        try captureQueue.adoptOrAddVideoInput(seedInput)
+
+        #expect(session.deviceInputs.count == 1)
+        #expect(session.deviceInputs.first === earlyInput)
+        #expect(captureQueue.activeVideoInputDevice?.uniqueID == earlyInput.device.uniqueID)
+    }
+
+    @Test("Setup adds the video input when nothing raced ahead of it")
+    func setupAddsInputWhenSessionIsEmpty() throws {
+        let session = MockCaptureSession()
+        let seedInput = try #require(MockDeviceInput.get(mediaType: .video, position: .back))
+        let captureQueue = CameraManagerCaptureQueue(
+            session: session,
+            activeVideoInput: seedInput,
+            makeRearInput: { MockDeviceInput.get(mediaType: .video, deviceType: $0, position: .back) }
+        )
+
+        try captureQueue.adoptOrAddVideoInput(seedInput)
+
+        #expect(session.deviceInputs.count == 1)
+        #expect(session.deviceInputs.first === seedInput)
+    }
+
     @Test("Photo capture settings request the output's full-quality tier and maximum dimensions")
     func photoCaptureSettingsRequestFullQuality() throws {
         let cameraManager = CameraManager(

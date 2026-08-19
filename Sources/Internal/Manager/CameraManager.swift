@@ -19,7 +19,7 @@ import AVKit
     private(set) var captureSession: any CaptureSession
     private(set) var frontCameraInput: (any CaptureDeviceInput)?
     private(set) var backCameraInput: (any CaptureDeviceInput)?
-    private let captureQueue: CameraManagerCaptureQueue
+    let captureQueue: CameraManagerCaptureQueue
 
     // MARK: Output
     private(set) var photoOutput: CameraManagerPhotoOutput = .init()
@@ -66,6 +66,10 @@ extension CameraManager {
 
 // MARK: Setup
 extension CameraManager {
+    // The session can already hold an input a caller selected before setup ran, so the device the
+    // rest of setup configures is read back from the session rather than resolved by position.
+    var activeVideoInputDevice: (any CaptureDevice)? { captureQueue.activeVideoInputDevice ?? getCameraInput()?.device }
+
     func setup() async throws(MCameraError) {
         try await permissionsManager.requestAccess(parent: self)
 
@@ -91,9 +95,7 @@ private extension CameraManager {
         cameraView.layer.addSublayer(cameraLayer)
     }
     func setupDeviceInputs() throws(MCameraError) {
-        let cameraInput = getCameraInput()
-        try captureQueue.add(input: cameraInput)
-        captureQueue.setActiveVideoInput(cameraInput)
+        try captureQueue.adoptOrAddVideoInput(getCameraInput())
         if let audioInput = getAudioInput() { try captureQueue.add(input: audioInput) }
     }
     func setupDeviceOutput() throws(MCameraError) {
@@ -107,7 +109,7 @@ private extension CameraManager {
         configureFrameOutputConnection()
     }
     func startSession() { Task {
-        guard let device = getCameraInput()?.device else { return }
+        guard let device = activeVideoInputDevice else { return }
 
         await startCaptureSession()
         try setupDevice(device)
@@ -496,9 +498,7 @@ extension CameraManager {
     func setResolution(_ resolution: AVCaptureSession.Preset) {
         guard resolution != attributes.resolution, resolution != attributes.resolution, !isChanging else { return }
 
-        captureSession.beginConfiguration()
-        captureSession.sessionPreset = resolution
-        captureSession.commitConfiguration()
+        captureQueue.setSessionPreset(resolution)
         attributes.resolution = resolution
     }
 }

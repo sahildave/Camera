@@ -10,6 +10,10 @@ final class CameraManagerCaptureQueue: @unchecked Sendable {
 
     private var session: any CaptureSession
     private var activeVideoInput: (any CaptureDeviceInput)?
+    /// Whether `activeVideoInput` is actually in the session. Derived state would have to read
+    /// `session.deviceInputs`, whose `AVCaptureSession` implementation is an all-or-nothing array
+    /// cast that yields `[]` if any input does not conform — silently losing the input we hold.
+    private var activeVideoInputIsInSession: Bool = false
     private let makeRearInput: @Sendable (AVCaptureDevice.DeviceType) -> (any CaptureDeviceInput)?
 
     init(
@@ -45,6 +49,12 @@ extension CameraManagerCaptureQueue {
             activeVideoInput = input
         }
     }
+
+    /// The device the session is actually capturing from, which after an adoption is not
+    /// necessarily the one `getCameraInput()` would resolve by position.
+    var activeVideoInputDevice: (any CaptureDevice)? {
+        queue.sync { activeVideoInput?.device }
+    }
 }
 
 // MARK: Session Operations
@@ -58,6 +68,38 @@ extension CameraManagerCaptureQueue {
             throw error
         } catch {
             throw .cannotSetupInput
+        }
+    }
+
+    /// Adds the video input, or adopts the one the session already carries.
+    ///
+    /// `setup()` suspends on the permission request, so a caller that replays state onto the
+    /// manager (selecting a rear lens, say) can reach the still-empty session first and fill the
+    /// single video slot. Setup would then fail `canAddInput` and throw, aborting before the
+    /// outputs are attached and leaving `photoOutput` orphaned with no connection. Adopting the
+    /// input that is already there keeps the lens the caller picked and lets setup finish.
+    func adoptOrAddVideoInput(_ input: (any CaptureDeviceInput)?) throws(MCameraError) {
+        do {
+            try queue.sync {
+                if activeVideoInputIsInSession { return }
+                try session.add(input: input)
+                activeVideoInput = input
+                activeVideoInputIsInSession = true
+            }
+        } catch let error as MCameraError {
+            throw error
+        } catch {
+            throw .cannotSetupInput
+        }
+    }
+
+    /// Applies the session preset on the capture queue, so the transaction cannot overlap one
+    /// this queue is already running for an input swap.
+    func setSessionPreset(_ preset: AVCaptureSession.Preset) {
+        queue.sync {
+            session.beginConfiguration()
+            session.sessionPreset = preset
+            session.commitConfiguration()
         }
     }
 
@@ -85,6 +127,7 @@ extension CameraManagerCaptureQueue {
                 do {
                     try session.add(input: input)
                     activeVideoInput = input
+                    activeVideoInputIsInSession = true
                 } catch {
                     if let previousInput { try? session.add(input: previousInput) }
                     activeVideoInput = previousInput
@@ -153,6 +196,7 @@ extension CameraManagerCaptureQueue {
                 do {
                     try session.add(input: requestedInput)
                     activeVideoInput = requestedInput
+                    activeVideoInputIsInSession = true
                     return (.success(lens), requestedInput)
                 } catch let error as MCameraError {
                     if let previousInput { try? session.add(input: previousInput) }
