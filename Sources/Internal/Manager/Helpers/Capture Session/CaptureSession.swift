@@ -19,6 +19,8 @@ protocol CaptureSession: Sendable {
     var sessionPreset: AVCaptureSession.Preset { get set }
 
     // MARK: Methods
+    func beginConfiguration()
+    func commitConfiguration()
     func startRunning()
     func stopRunningAndReturnNewInstance() -> CaptureSession
     func add(input: (any CaptureDeviceInput)?) throws(MCameraError)
